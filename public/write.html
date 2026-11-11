@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>게시글 작성 - 종합 다중게시판</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page-wrapper" style="max-width: 900px;">
+    <!-- 상단 헤더 -->
+    <header class="board-header">
+      <div class="board-title-group">
+        <a href="/" class="board-title">게시글 작성</a>
+        <span class="board-subtitle">새 글 등록</span>
+      </div>
+      <div class="header-links">
+        <a href="/" class="btn-classic">← 목록보기</a>
+      </div>
+    </header>
+
+    <!-- 안내 문구 -->
+    <div style="background-color: #fcfcfc; border: 1px solid #e2e2e2; padding: 10px 14px; margin-bottom: 15px; font-size: 11px; color: #555555; line-height: 1.6;">
+      • 비회원은 임의의 닉네임과 <strong>4자리 비밀번호</strong>로 자유롭게 등록하실 수 있습니다.<br>
+      • 로그인 회원은 본인 계정으로 안전하게 등록되며, 글 수정/삭제 시 비밀번호를 묻지 않습니다.<br>
+      • 금칙어(비속어/광고)는 등록 시 자동으로 필터링 처리됩니다.
+    </div>
+
+    <!-- 글쓰기 폼 테이블 -->
+    <form id="writeForm" onsubmit="handlePostSubmit(event)">
+      <table class="form-table">
+        <tr>
+          <th>게시판 선택 <span style="color: #c9302c;">*</span></th>
+          <td>
+            <select id="boardSelect" class="classic-select" style="width: 200px;" required>
+              <!-- 동적 로드 -->
+            </select>
+          </td>
+        </tr>
+        <tr>
+          <th>작성자 닉네임</th>
+          <td>
+            <input type="text" id="authorName" class="classic-input" value="익명" style="width: 150px;" maxlength="20">
+            <span id="memberBadge" style="display: none; color: #0b58a2; font-weight: bold; margin-left: 6px;">(회원)</span>
+          </td>
+        </tr>
+        <tr id="passwordRow">
+          <th>비밀번호 <span style="color: #c9302c;">*</span></th>
+          <td>
+            <input type="password" id="password" class="classic-input" style="width: 150px;" placeholder="4자리 이상" minlength="4">
+            <span style="font-size: 11px; color: #888888; margin-left: 6px;">(비회원 글 수정/삭제/비밀글 조회용)</span>
+          </td>
+        </tr>
+        <tr>
+          <th>말머리/분류 <span style="color: #c9302c;">*</span></th>
+          <td>
+            <input type="text" id="category" class="classic-input" value="일반" style="width: 150px;" required placeholder="예: 일반, 질문, 후기, 제안">
+          </td>
+        </tr>
+        <tr>
+          <th>옵션</th>
+          <td>
+            <div style="display: flex; gap: 15px; align-items: center;">
+              <label style="cursor: pointer; font-size: 11px; color: #444444; display: inline-flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="isSecret">
+                <span>🔒 <strong>비밀글</strong> (작성자와 관리자만 열람)</span>
+              </label>
+              <label id="noticeOptionLabel" style="display: none; cursor: pointer; font-size: 11px; color: #c9302c; display: inline-flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="isNotice">
+                <span>📢 <strong>공지글 상단 고정</strong></span>
+              </label>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th>제목 <span style="color: #c9302c;">*</span></th>
+          <td>
+            <input type="text" id="title" class="form-classic-input" placeholder="제목을 입력해주세요" required maxlength="120">
+          </td>
+        </tr>
+        <tr>
+          <th>파일/사진 첨부</th>
+          <td>
+            <input type="file" id="fileInput" multiple style="font-size: 11px;">
+            <div style="font-size: 10px; color: #888888; margin-top: 3px;">
+              * 이미지(JPG, PNG, GIF) 또는 문서/압축 파일 첨부 가능 (갤러리 게시판 등록 시 첫 번째 이미지가 썸네일로 활용됩니다)
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <th style="vertical-align: top; padding-top: 10px;">내용 <span style="color: #c9302c;">*</span></th>
+          <td>
+            <textarea id="content" class="form-classic-textarea" rows="14" placeholder="내용을 작성해주세요." required></textarea>
+          </td>
+        </tr>
+      </table>
+
+      <div id="formError" style="color: #c9302c; font-size: 11px; margin-bottom: 12px; display: none;"></div>
+
+      <!-- 하단 버튼 -->
+      <div style="display: flex; justify-content: center; gap: 8px; margin-top: 18px;">
+        <a href="/" class="btn-classic">취소</a>
+        <button type="submit" id="submitBtn" class="btn-classic btn-classic-primary" style="padding: 3px 20px;">
+          게시글 등록완료
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    let isMember = false;
+    let isAdmin = false;
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await loadBoardsForWrite();
+      await checkAuthForWrite();
+    });
+
+    async function loadBoardsForWrite() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        let targetBoardId = urlParams.get("boardId");
+        if (!targetBoardId) {
+          try {
+            targetBoardId = localStorage.getItem("last_active_board_id");
+          } catch {}
+        }
+        if (!targetBoardId) targetBoardId = "voc";
+
+        const res = await fetch("/api/boards");
+        const data = await res.json();
+        const select = document.getElementById("boardSelect");
+
+        select.innerHTML = (data.boards || [])
+          .map((b) => `<option value="${b.id}" ${b.id === targetBoardId ? "selected" : ""}>[${b.board_type}] ${b.name}</option>`)
+          .join("");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function checkAuthForWrite() {
+      try {
+        // 관리자 확인
+        const adminRes = await fetch("/api/admin/me");
+        const adminData = await adminRes.json();
+        if (adminData.authenticated) {
+          isAdmin = true;
+          document.getElementById("noticeOptionLabel").style.display = "inline-flex";
+        }
+
+        // 회원 확인
+        const userRes = await fetch("/api/users/me");
+        const userData = await userRes.json();
+        if (userData.authenticated && userData.user) {
+          isMember = true;
+          document.getElementById("authorName").value = userData.user.nickname;
+          document.getElementById("authorName").readOnly = true;
+          document.getElementById("memberBadge").style.display = "inline";
+          document.getElementById("passwordRow").style.display = "none";
+        }
+      } catch {}
+    }
+
+    async function handlePostSubmit(e) {
+      e.preventDefault();
+      const formError = document.getElementById("formError");
+      const submitBtn = document.getElementById("submitBtn");
+      formError.style.display = "none";
+
+      const boardId = document.getElementById("boardSelect").value;
+      const title = document.getElementById("title").value.trim();
+      const content = document.getElementById("content").value.trim();
+      const authorName = document.getElementById("authorName").value.trim() || "익명";
+      const password = document.getElementById("password").value;
+      const category = document.getElementById("category").value.trim() || "일반";
+      const isSecret = document.getElementById("isSecret").checked;
+      const isNotice = document.getElementById("isNotice").checked;
+
+      if (!title || !content) {
+        formError.textContent = "제목과 내용을 입력해주세요.";
+        formError.style.display = "block";
+        return;
+      }
+
+      if (!isMember && !isAdmin && (!password || password.length < 4)) {
+        formError.textContent = "비회원은 4자리 이상 비밀번호를 입력해야 합니다.";
+        formError.style.display = "block";
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "업로드 중...";
+
+      try {
+        const formData = new FormData();
+        formData.append("boardId", boardId);
+        formData.append("title", title);
+        formData.append("content", content);
+        formData.append("authorName", authorName);
+        formData.append("password", password);
+        formData.append("category", category);
+        formData.append("isSecret", isSecret ? "1" : "0");
+        formData.append("isNotice", isNotice ? "1" : "0");
+
+        const fileInput = document.getElementById("fileInput");
+        if (fileInput.files && fileInput.files.length > 0) {
+          for (let i = 0; i < fileInput.files.length; i++) {
+            formData.append("file", fileInput.files[i]);
+          }
+        }
+
+        const res = await fetch("/api/posts", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "등록 실패");
+
+        try {
+          localStorage.setItem("last_active_board_id", boardId);
+        } catch {}
+        alert("게시글이 성공적으로 등록되었습니다.");
+        window.location.href = `/?boardId=${boardId}`;
+      } catch (err) {
+        formError.textContent = err.message;
+        formError.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "게시글 등록완료";
+      }
+    }
+  </script>
+</body>
+</html>

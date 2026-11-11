@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>통합 관리자 센터 - 종합 다중게시판</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .admin-menu-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid #556270;
+      margin-bottom: 12px;
+    }
+    .admin-menu-tab {
+      padding: 6px 14px;
+      background-color: #f0f2f5;
+      border: 1px solid #cccccc;
+      border-bottom: none;
+      font-size: 11px;
+      font-weight: bold;
+      color: #555555;
+      cursor: pointer;
+      border-radius: 3px 3px 0 0;
+    }
+    .admin-menu-tab.active {
+      background-color: #556270;
+      color: #ffffff;
+      border-color: #556270;
+    }
+    .admin-stat-summary {
+      background-color: #f8f8f8;
+      border: 1px solid #e0e0e0;
+      padding: 8px 14px;
+      font-size: 11px;
+      color: #555555;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .batch-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background-color: #f3f5f8;
+      border: 1px solid #d5dae2;
+      padding: 6px 10px;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <!-- 상단 헤더 -->
+    <header class="board-header">
+      <div class="board-title-group">
+        <a href="/admin" class="board-title">종합 관리자 센터</a>
+        <span class="board-subtitle">CMS Master Administration</span>
+      </div>
+      <div class="header-links">
+        <a href="/" class="btn-classic">사용자 게시판 보기</a>
+        <button id="logoutBtn" class="btn-classic" onclick="handleLogout()" style="display: none;">로그아웃</button>
+      </div>
+    </header>
+
+    <!-- 1. 미인증 시 로그인 폼 -->
+    <div id="loginSection" style="max-width: 360px; margin: 40px auto; border: 1px solid #b8b8b8; padding: 24px; background-color: #fafafa; display: none;">
+      <h3 style="font-size: 13px; font-weight: bold; margin-bottom: 12px; text-align: center; color: #333333;">
+        관리자 마스터 로그인
+      </h3>
+      <form onsubmit="handleLogin(event)">
+        <div style="margin-bottom: 8px;">
+          <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 3px;">아이디</label>
+          <input type="text" id="loginUsername" class="form-classic-input" value="admin" required>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 3px;">비밀번호</label>
+          <input type="password" id="loginPassword" class="form-classic-input" placeholder="admin1234!" required>
+        </div>
+        <div id="loginError" style="color: #c9302c; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+        <button type="submit" class="btn-classic btn-classic-primary" style="width: 100%; height: 26px;">
+          로그인
+        </button>
+      </form>
+    </div>
+
+    <!-- 2. 인증 완료 시 대시보드 메인 -->
+    <div id="dashboardSection" style="display: none;">
+      <!-- 관리자 메뉴 탭 -->
+      <div class="admin-menu-tabs">
+        <button class="admin-menu-tab active" onclick="switchAdminTab('posts')">게시글 관리 & 일괄 처리</button>
+        <button class="admin-menu-tab" onclick="switchAdminTab('boards')">게시판 마스터 관리</button>
+        <button class="admin-menu-tab" onclick="switchAdminTab('badwords')">금칙어 필터 관리</button>
+        <button class="admin-menu-tab" onclick="switchAdminTab('users')">회원 관리</button>
+        <button class="admin-menu-tab" onclick="switchAdminTab('trash')">휴지통 (<span id="trashCountDisplay">0</span>)</button>
+      </div>
+
+      <!-- 탭 1: 게시글 관리 & 일괄 처리 -->
+      <div id="tabPostsSection">
+        <div class="admin-stat-summary">
+          <span>전체 게시글: <strong id="statTotal">0</strong>건</span>
+          <span>|</span>
+          <span>접수대기: <strong id="statWaiting" style="color: #b86000;">0</strong>건</span>
+          <span>|</span>
+          <span>검토중: <strong id="statProcessing" style="color: #0066cc;">0</strong>건</span>
+          <span>|</span>
+          <span>답변완료: <strong id="statCompleted" style="color: #008800;">0</strong>건</span>
+        </div>
+
+        <!-- 일괄 관리 바 -->
+        <div class="batch-bar">
+          <strong>일괄 작업:</strong>
+          <button type="button" class="btn-classic btn-classic-danger" onclick="executeBatch('delete')" style="font-size: 10px;">선택 일괄 삭제</button>
+          <span>|</span>
+          <span>선택 글 이동:</span>
+          <select id="batchTargetBoardSelect" class="classic-select">
+            <!-- 동적 게시판 목록 -->
+          </select>
+          <button type="button" class="btn-classic" onclick="executeBatch('move')" style="font-size: 10px;">이동 실행</button>
+        </div>
+
+        <!-- 필터 & 검색 -->
+        <div class="search-bar-container">
+          <div style="display: flex; gap: 6px; align-items: center;">
+            <select id="adminBoardSelect" class="classic-select" onchange="loadAdminPosts()">
+              <option value="ALL">전체 게시판</option>
+            </select>
+            <select id="adminStatusSelect" class="classic-select" onchange="loadAdminPosts()">
+              <option value="ALL">전체 상태</option>
+              <option value="WAITING">접수대기</option>
+              <option value="PROCESSING">검토중</option>
+              <option value="COMPLETED">답변완료</option>
+              <option value="REJECTED">보류</option>
+            </select>
+          </div>
+          <div class="search-form-group">
+            <input type="text" id="adminSearchInput" class="classic-input" placeholder="검색어 입력">
+            <button class="btn-purple-search" onclick="loadAdminPosts()">검색</button>
+          </div>
+        </div>
+
+        <!-- 관리 테이블 -->
+        <table class="classic-board-table">
+          <thead>
+            <tr>
+              <th style="width: 35px;"><input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)"></th>
+              <th style="width: 75px;">상태설정</th>
+              <th style="width: 80px;">게시판</th>
+              <th class="th-title">제목 및 내용 (원문 전체)</th>
+              <th style="width: 90px;">작성자</th>
+              <th style="width: 80px;">등록일</th>
+              <th style="width: 110px;">관리</th>
+            </tr>
+          </thead>
+          <tbody id="adminPostsTableBody"></tbody>
+        </table>
+        <div id="adminPagination" class="classic-pagination"></div>
+      </div>
+
+      <!-- 탭 2: 게시판 마스터 관리 -->
+      <div id="tabBoardsSection" style="display: none;">
+        <div style="background-color: #fafafa; border: 1px solid #ddd; padding: 12px; margin-bottom: 14px;">
+          <h4 style="font-size: 12px; font-weight: bold; margin-bottom: 8px;">+ 새 게시판 생성</h4>
+          <form onsubmit="handleCreateBoardSubmit(event)">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px;">
+              <input type="text" id="newBoardId" class="classic-input" placeholder="게시판 ID (예: qna)" required style="width: 120px;">
+              <input type="text" id="newBoardName" class="classic-input" placeholder="게시판 이름 (예: 질문과답변)" required style="width: 150px;">
+              <input type="text" id="newBoardDesc" class="classic-input" placeholder="게시판 한줄 설명" style="width: 200px;">
+              <select id="newBoardType" class="classic-select">
+                <option value="LIST">목록형 (LIST)</option>
+                <option value="GALLERY">갤러리형 (GALLERY)</option>
+                <option value="WEBZINE">웹진형 (WEBZINE)</option>
+                <option value="NOTICE">공지형 (NOTICE)</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: center; font-size: 11px;">
+              <label><input type="checkbox" id="newBoardAllowSecret" checked> 비밀글 허용</label>
+              <label><input type="checkbox" id="newBoardAllowComment" checked> 댓글 허용</label>
+              <label><input type="checkbox" id="newBoardAllowVote" checked> 추천 허용</label>
+              <label><input type="checkbox" id="newBoardAllowFile" checked> 파일첨부 허용</label>
+              <button type="submit" class="btn-classic btn-classic-primary" style="margin-left: auto;">게시판 생성</button>
+            </div>
+          </form>
+        </div>
+
+        <table class="classic-board-table">
+          <thead>
+            <tr>
+              <th style="width: 100px;">ID (slug)</th>
+              <th style="width: 140px;">게시판 이름</th>
+              <th>설명</th>
+              <th style="width: 90px;">유형</th>
+              <th style="width: 80px;">관리</th>
+            </tr>
+          </thead>
+          <tbody id="adminBoardsTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 탭 3: 금칙어 필터 관리 -->
+      <div id="tabBadwordsSection" style="display: none;">
+        <div style="background-color: #fafafa; border: 1px solid #ddd; padding: 10px; margin-bottom: 12px; display: flex; gap: 6px;">
+          <input type="text" id="newBadwordInput" class="classic-input" placeholder="추가할 금칙어 입력" style="width: 200px;">
+          <button type="button" class="btn-classic btn-classic-primary" onclick="handleAddBadword()">금칙어 등록</button>
+        </div>
+        <div id="badwordsTagContainer" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; border: 1px solid #eee;"></div>
+      </div>
+
+      <!-- 탭 4: 회원 관리 -->
+      <div id="tabUsersSection" style="display: none;">
+        <table class="classic-board-table">
+          <thead>
+            <tr>
+              <th style="width: 120px;">아이디</th>
+              <th style="width: 120px;">닉네임</th>
+              <th style="width: 90px;">등급(Level)</th>
+              <th style="width: 80px;">포인트</th>
+              <th style="width: 80px;">작성글</th>
+              <th style="width: 100px;">가입일</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- 탭 5: 휴지통 관리 -->
+      <div id="tabTrashSection" style="display: none;">
+        <table class="classic-board-table">
+          <thead>
+            <tr>
+              <th style="width: 90px;">게시판</th>
+              <th class="th-title">제목</th>
+              <th style="width: 100px;">작성자</th>
+              <th style="width: 120px;">삭제일</th>
+              <th style="width: 120px;">관리</th>
+            </tr>
+          </thead>
+          <tbody id="adminTrashTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 공식 답변 작성 모달 -->
+  <div id="answerModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box">
+      <div class="classic-modal-header">
+        <span>공식 답변 작성 / 수정</span>
+        <button class="classic-modal-close" onclick="closeModal('answerModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body">
+        <div style="background-color: #f7f7f7; border: 1px solid #dddddd; padding: 8px 10px; margin-bottom: 12px; font-size: 11px;">
+          <div id="answerTargetTitle" style="font-weight: bold; color: #222222; margin-bottom: 4px;"></div>
+          <div id="answerTargetContent" style="color: #666666; max-height: 80px; overflow-y: auto; white-space: pre-wrap;"></div>
+        </div>
+
+        <form onsubmit="handleAnswerSubmit(event)">
+          <table class="form-table">
+            <tr>
+              <th>답변자 표시명</th>
+              <td>
+                <input type="text" id="answerAuthorInput" class="classic-input" style="width: 160px;" value="총괄운영팀" required>
+              </td>
+            </tr>
+            <tr>
+              <th>답변 내용 <span style="color: #c9302c;">*</span></th>
+              <td>
+                <textarea id="answerContentInput" class="form-classic-textarea" rows="8" placeholder="이용자에게 전달할 답변을 작성해주세요." required></textarea>
+              </td>
+            </tr>
+            <tr>
+              <th>답변 후 상태</th>
+              <td>
+                <select id="answerNextStatus" class="classic-select">
+                  <option value="COMPLETED" selected>답변완료</option>
+                  <option value="PROCESSING">검토/처리중</option>
+                  <option value="REJECTED">보류</option>
+                </select>
+              </td>
+            </tr>
+          </table>
+
+          <div id="answerError" style="color: #c9302c; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+          <div style="display: flex; justify-content: flex-end; gap: 6px;">
+            <button type="button" class="btn-classic" onclick="closeModal('answerModal')">취소</button>
+            <button type="submit" id="saveAnswerBtn" class="btn-classic btn-classic-primary">답변 등록완료</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentAdmin = null;
+    let adminCurrentPage = 1;
+    let activePostIdForAnswer = null;
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      await checkAdminAuth();
+      const input = document.getElementById("adminSearchInput");
+      if (input) {
+        input.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") loadAdminPosts();
+        });
+      }
+    });
+
+    async function checkAdminAuth() {
+      try {
+        const res = await fetch("/api/admin/me");
+        const data = await res.json();
+        if (data.authenticated) {
+          currentAdmin = data.admin;
+          showDashboard();
+          await loadBoardsForAdmin();
+          loadAdminPosts();
+        } else {
+          showLogin();
+        }
+      } catch {
+        showLogin();
+      }
+    }
+
+    function showLogin() {
+      document.getElementById("loginSection").style.display = "block";
+      document.getElementById("dashboardSection").style.display = "none";
+      document.getElementById("logoutBtn").style.display = "none";
+    }
+
+    function showDashboard() {
+      document.getElementById("loginSection").style.display = "none";
+      document.getElementById("dashboardSection").style.display = "block";
+      document.getElementById("logoutBtn").style.display = "inline-flex";
+    }
+
+    function switchAdminTab(tabName) {
+      document.querySelectorAll(".admin-menu-tab").forEach((t) => t.classList.remove("active"));
+      event.target.classList.add("active");
+
+      document.getElementById("tabPostsSection").style.display = tabName === "posts" ? "block" : "none";
+      document.getElementById("tabBoardsSection").style.display = tabName === "boards" ? "block" : "none";
+      document.getElementById("tabBadwordsSection").style.display = tabName === "badwords" ? "block" : "none";
+      document.getElementById("tabUsersSection").style.display = tabName === "users" ? "block" : "none";
+      document.getElementById("tabTrashSection").style.display = tabName === "trash" ? "block" : "none";
+
+      if (tabName === "posts") loadAdminPosts();
+      if (tabName === "boards") loadAdminBoardsTable();
+      if (tabName === "badwords") loadAdminBadwords();
+      if (tabName === "users") loadAdminUsers();
+      if (tabName === "trash") loadAdminTrash();
+    }
+
+    async function loadBoardsForAdmin() {
+      try {
+        const res = await fetch("/api/boards");
+        const data = await res.json();
+        const boards = data.boards || [];
+
+        const select1 = document.getElementById("adminBoardSelect");
+        select1.innerHTML = '<option value="ALL">전체 게시판</option>' + boards.map((b) => `<option value="${b.id}">${b.name}</option>`).join("");
+
+        const select2 = document.getElementById("batchTargetBoardSelect");
+        select2.innerHTML = boards.map((b) => `<option value="${b.id}">${b.name}</option>`).join("");
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    async function loadAdminPosts() {
+      const tbody = document.getElementById("adminPostsTableBody");
+      const boardId = document.getElementById("adminBoardSelect").value;
+      const status = document.getElementById("adminStatusSelect").value;
+      const search = document.getElementById("adminSearchInput").value.trim();
+
+      // 전체선택 체크박스 해제
+      const selectAll = document.getElementById("selectAllCheckbox");
+      if (selectAll) selectAll.checked = false;
+
+      try {
+        const url = new URL("/api/admin/posts", window.location.origin);
+        url.searchParams.set("page", adminCurrentPage);
+        url.searchParams.set("limit", 20);
+        if (boardId !== "ALL") url.searchParams.set("boardId", boardId);
+        if (status !== "ALL") url.searchParams.set("status", status);
+        if (search) url.searchParams.set("search", search);
+
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        document.getElementById("statTotal").textContent = data.stats.total;
+        document.getElementById("statWaiting").textContent = data.stats.waiting;
+        document.getElementById("statProcessing").textContent = data.stats.processing;
+        document.getElementById("statCompleted").textContent = data.stats.completed;
+        document.getElementById("trashCountDisplay").textContent = data.stats.trash;
+
+        if (data.posts.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: #888;">게시글이 없습니다.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.posts
+          .map((post) => {
+            return `
+            <tr>
+              <td style="text-align: center;"><input type="checkbox" class="post-checkbox" value="${post.id}"></td>
+              <td style="text-align: center;">
+                <select onchange="updatePostStatus('${post.id}', this.value)" class="classic-select" style="font-size: 11px;">
+                  <option value="WAITING" ${post.status === "WAITING" ? "selected" : ""}>접수대기</option>
+                  <option value="PROCESSING" ${post.status === "PROCESSING" ? "selected" : ""}>검토중</option>
+                  <option value="COMPLETED" ${post.status === "COMPLETED" ? "selected" : ""}>답변완료</option>
+                  <option value="REJECTED" ${post.status === "REJECTED" ? "selected" : ""}>보류</option>
+                </select>
+              </td>
+              <td style="text-align: center; font-size: 11px;">[${escapeHtml(post.boardName)}]</td>
+              <td class="td-title" style="white-space: normal;">
+                <div style="font-weight: bold; margin-bottom: 2px;">
+                  ${post.isNotice ? '<span class="badge-notice">공지</span>' : ""}
+                  ${post.isSecret ? '<span style="color: #c9302c;">[비밀글] </span>' : ""}
+                  ${escapeHtml(post.title)}
+                </div>
+                <div style="font-size: 11px; color: #555;">${escapeHtml(post.content)}</div>
+              </td>
+              <td class="td-author">${escapeHtml(post.authorName)}</td>
+              <td class="td-date">${formatDate(post.createdAt)}</td>
+              <td style="text-align: center;">
+                <button class="btn-classic" onclick='openAnswerModal(${JSON.stringify(post)})' style="font-size: 10px; padding: 1px 5px;">답변</button>
+                <button class="btn-classic btn-classic-danger" onclick="adminDeletePost('${post.id}')" style="font-size: 10px; padding: 1px 5px;">삭제</button>
+              </td>
+            </tr>
+          `;
+          })
+          .join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #c9302c; padding: 20px;">${err.message}</td></tr>`;
+      }
+    }
+
+    function toggleSelectAll(master) {
+      document.querySelectorAll(".post-checkbox").forEach((cb) => (cb.checked = master.checked));
+    }
+
+    async function executeBatch(action) {
+      const selected = Array.from(document.querySelectorAll(".post-checkbox:checked")).map((cb) => cb.value);
+      if (selected.length === 0) return alert("선택된 게시글이 없습니다.");
+
+      const targetBoardId = document.getElementById("batchTargetBoardSelect").value;
+      if (!confirm(`선택한 ${selected.length}건의 글에 대해 '${action === "delete" ? "일괄 삭제" : "게시판 이동"}'을 실행하시겠습니까?`)) return;
+
+      try {
+        const res = await fetch("/api/admin/posts/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, postIds: selected, targetBoardId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        alert(data.message);
+        loadAdminPosts();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadAdminBoardsTable() {
+      const tbody = document.getElementById("adminBoardsTableBody");
+      try {
+        const res = await fetch("/api/boards");
+        const data = await res.json();
+        tbody.innerHTML = (data.boards || [])
+          .map(
+            (b) => `
+          <tr>
+            <td style="text-align: center; font-weight: bold;">${b.id}</td>
+            <td>${escapeHtml(b.name)}</td>
+            <td>${escapeHtml(b.description || "")}</td>
+            <td style="text-align: center;">${b.board_type}</td>
+            <td style="text-align: center;">
+              ${b.id !== "voc" ? `<button class="btn-classic btn-classic-danger" onclick="deleteBoard('${b.id}')" style="font-size: 10px;">삭제</button>` : "-"}
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5">${err.message}</td></tr>`;
+      }
+    }
+
+    async function handleCreateBoardSubmit(e) {
+      e.preventDefault();
+      const id = document.getElementById("newBoardId").value.trim();
+      const name = document.getElementById("newBoardName").value.trim();
+      const description = document.getElementById("newBoardDesc").value.trim();
+      const boardType = document.getElementById("newBoardType").value;
+      const allowSecret = document.getElementById("newBoardAllowSecret").checked;
+      const allowComment = document.getElementById("newBoardAllowComment").checked;
+      const allowVote = document.getElementById("newBoardAllowVote").checked;
+      const allowFile = document.getElementById("newBoardAllowFile").checked;
+
+      try {
+        const res = await fetch("/api/boards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, name, description, boardType, allowSecret, allowComment, allowVote, allowFile }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        alert(data.message);
+        loadAdminBoardsTable();
+        loadBoardsForAdmin();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function deleteBoard(id) {
+      if (!confirm(`게시판 '${id}'와 소속 글을 모두 삭제하시겠습니까?`)) return;
+      try {
+        const res = await fetch(`/api/boards/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        loadAdminBoardsTable();
+        loadBoardsForAdmin();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function loadAdminBadwords() {
+      const container = document.getElementById("badwordsTagContainer");
+      try {
+        const res = await fetch("/api/admin/badwords");
+        const data = await res.json();
+        container.innerHTML = (data.badwords || [])
+          .map((w) => `<span style="background: #fee; border: 1px solid #fcc; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${escapeHtml(w.word)} <a onclick="deleteBadword('${w.id}')" style="color: red; cursor: pointer; font-weight: bold;">×</a></span>`)
+          .join(" ");
+      } catch {}
+    }
+
+    async function handleAddBadword() {
+      const input = document.getElementById("newBadwordInput");
+      const word = input.value.trim();
+      if (!word) return;
+      try {
+        const res = await fetch("/api/admin/badwords", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ word }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        input.value = "";
+        loadAdminBadwords();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function deleteBadword(id) {
+      await fetch("/api/admin/badwords", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      loadAdminBadwords();
+    }
+
+    async function loadAdminUsers() {
+      const tbody = document.getElementById("adminUsersTableBody");
+      try {
+        const res = await fetch("/api/admin/users");
+        const data = await res.json();
+        tbody.innerHTML = (data.users || [])
+          .map(
+            (u) => `
+          <tr>
+            <td style="font-weight: bold;">${escapeHtml(u.username)}</td>
+            <td>${escapeHtml(u.nickname)}</td>
+            <td style="text-align: center;">Lv.${u.level}</td>
+            <td style="text-align: center; color: #0b58a2;">${u.point}P</td>
+            <td style="text-align: center;">${u.post_count}건</td>
+            <td style="text-align: center; color: #777;">${formatDate(u.created_at)}</td>
+          </tr>
+        `
+          )
+          .join("");
+      } catch {}
+    }
+
+    async function loadAdminTrash() {
+      const tbody = document.getElementById("adminTrashTableBody");
+      try {
+        const res = await fetch("/api/admin/trash");
+        const data = await res.json();
+        if (data.posts.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 25px; color: #888;">휴지통이 비어 있습니다.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = data.posts
+          .map(
+            (p) => `
+          <tr>
+            <td style="text-align: center;">[${escapeHtml(p.board_name || p.board_id)}]</td>
+            <td class="td-title">${escapeHtml(p.title)}</td>
+            <td class="td-author">${escapeHtml(p.author_name)}</td>
+            <td class="td-date">${formatDate(p.deleted_at, true)}</td>
+            <td style="text-align: center;">
+              <button class="btn-classic" onclick="trashAction('restore', '${p.id}')" style="font-size: 10px;">복구</button>
+              <button class="btn-classic btn-classic-danger" onclick="trashAction('permanent_delete', '${p.id}')" style="font-size: 10px;">영구삭제</button>
+            </td>
+          </tr>
+        `
+          )
+          .join("");
+      } catch {}
+    }
+
+    async function trashAction(action, postId) {
+      if (action === "permanent_delete" && !confirm("정말 영구 삭제하시겠습니까? 데이터는 복구할 수 없습니다.")) return;
+      try {
+        const res = await fetch("/api/admin/trash", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, postId }),
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadAdminTrash();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    async function updatePostStatus(postId, newStatus) {
+      await fetch(`/api/admin/posts/${postId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      loadAdminPosts();
+    }
+
+    function openAnswerModal(post) {
+      activePostIdForAnswer = post.id;
+      document.getElementById("answerTargetTitle").textContent = post.title;
+      document.getElementById("answerTargetContent").textContent = post.content;
+      document.getElementById("answerContentInput").value = post.answer ? post.answer.content : "";
+      document.getElementById("answerModal").style.display = "flex";
+    }
+
+    async function handleAnswerSubmit(e) {
+      e.preventDefault();
+      const content = document.getElementById("answerContentInput").value.trim();
+      const authorName = document.getElementById("answerAuthorInput").value.trim();
+      const nextStatus = document.getElementById("answerNextStatus").value;
+
+      await fetch(`/api/admin/posts/${activePostIdForAnswer}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, authorName, nextStatus }),
+      });
+      closeModal("answerModal");
+      loadAdminPosts();
+    }
+
+    async function adminDeletePost(postId) {
+      if (!confirm("이 글을 휴지통으로 이동하시겠습니까?")) return;
+      await fetch(`/api/posts/${postId}`, { method: "DELETE" });
+      loadAdminPosts();
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById("loginUsername").value.trim();
+      const password = document.getElementById("loginPassword").value;
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data.error);
+      currentAdmin = data.admin;
+      showDashboard();
+      await loadBoardsForAdmin();
+      loadAdminPosts();
+    }
+
+    async function handleLogout() {
+      await fetch("/api/admin/logout", { method: "POST" });
+      showLogin();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = "none";
+    }
+
+    function formatDate(dateStr, includeTime = false) {
+      if (!dateStr) return "";
+      const d = new Date(dateStr);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      if (!includeTime) return `${year}-${month}-${day}`;
+      return `${year}-${month}-${day} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return str.replace(/[&<>'"]/g, (tag) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[tag] || tag));
+    }
+  </script>
+</body>
+</html>

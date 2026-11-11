@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>종합 다중게시판 시스템</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="page-wrapper">
+    <!-- 최상단 유저 상태 바 (회원가입/로그인) -->
+    <div class="user-status-bar" id="userStatusBar">
+      <div id="loggedOutMenu">
+        <a onclick="openModal('loginModal')">로그인</a>
+        <span>|</span>
+        <a onclick="openModal('registerModal')">회원가입</a>
+        <span>|</span>
+        <a href="/admin">관리자</a>
+      </div>
+      <div id="loggedInMenu" style="display: none;">
+        <span><strong id="userNicknameDisplay"></strong>님 (Lv.<span id="userLevelDisplay">1</span>)</span>
+        <span style="color: #0b58a2;">[<span id="userPointDisplay">0</span>P]</span>
+        <span>|</span>
+        <a onclick="handleUserLogoutSubmit()">로그아웃</a>
+        <span>|</span>
+        <a href="/admin">관리자</a>
+      </div>
+    </div>
+
+    <!-- 게시판 상단 헤더 -->
+    <header class="board-header">
+      <div class="board-title-group">
+        <a href="/" class="board-title" id="currentBoardTitle">컴전 게시판</a>
+        <span class="board-subtitle" id="currentBoardDesc">익명 이용자 소통 창구</span>
+      </div>
+      <div class="header-links">
+        <a href="/write" id="writeLinkBtn" class="btn-classic btn-classic-primary">글쓰기</a>
+      </div>
+    </header>
+
+    <!-- 다중 게시판 탭 바 (동적 렌더링) -->
+    <nav class="board-nav-tabs" id="boardTabsNav">
+      <!-- 동적 로딩 -->
+    </nav>
+
+    <!-- 말머리 / 카테고리 탭 -->
+    <div class="category-tab-bar" id="categoryFilter">
+      <span style="font-weight: bold; color: #444444;">말머리:</span>
+      <a class="category-tab-item active" data-category="전체">전체</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="세탁용품>오투액션">오투액션</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="세탁용품>옥시크린">옥시크린</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="서비스/응대">서비스/응대</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="시스템/오류">시스템/오류</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="시설/환경">시설/환경</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="제안/건의">제안/건의</a>
+      <span>|</span>
+      <a class="category-tab-item" data-category="기타">기타</a>
+    </div>
+
+    <!-- 검색 및 뷰 전환 툴바 -->
+    <div class="search-bar-container">
+      <div id="searchResultText" class="search-result-text"></div>
+
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <!-- 정렬 셀렉트 -->
+        <select id="sortSelect" class="classic-select" onchange="changeSort()">
+          <option value="latest">최신순</option>
+          <option value="views">조회순</option>
+          <option value="votes">추천순</option>
+        </select>
+
+        <!-- 뷰 전환 토글 (목록 | 갤러리 | 웹진) -->
+        <div class="view-mode-group">
+          <button type="button" class="view-mode-btn active" id="btnViewList" onclick="switchViewMode('LIST')">목록</button>
+          <button type="button" class="view-mode-btn" id="btnViewGallery" onclick="switchViewMode('GALLERY')">갤러리</button>
+          <button type="button" class="view-mode-btn" id="btnViewWebzine" onclick="switchViewMode('WEBZINE')">웹진</button>
+        </div>
+
+        <!-- 검색 폼 -->
+        <div class="search-form-group">
+          <select id="searchTypeSelect" class="classic-select">
+            <option value="title">제목</option>
+            <option value="author">아이디</option>
+            <option value="all">제목+내용</option>
+          </select>
+          <input type="text" id="searchInput" class="classic-input" placeholder="">
+          <button id="searchBtn" class="btn-purple-search" onclick="triggerSearch()">검색</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 1. 클래식 목록형 테이블 뷰 -->
+    <div id="viewListContainer">
+      <table class="classic-board-table">
+        <thead>
+          <tr>
+            <th style="width: 50px;">No.</th>
+            <th class="th-title">제목</th>
+            <th style="width: 110px;">아이디</th>
+            <th style="width: 90px;">날짜</th>
+            <th style="width: 50px;">추천</th>
+            <th style="width: 75px;">상태</th>
+          </tr>
+        </thead>
+        <tbody id="postsTableBody">
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 30px; color: #888888;">
+              목록을 불러오는 중입니다...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 2. 갤러리(카드 썸네일) 뷰 -->
+    <div id="viewGalleryContainer" style="display: none;">
+      <div id="galleryGrid" class="gallery-grid"></div>
+    </div>
+
+    <!-- 3. 웹진(요약 리스트) 뷰 -->
+    <div id="viewWebzineContainer" style="display: none;">
+      <div id="webzineList" class="webzine-list"></div>
+    </div>
+
+    <!-- 하단 페이징 -->
+    <div id="pagination" class="classic-pagination"></div>
+
+    <!-- 하단 툴바 -->
+    <div class="board-bottom-toolbar">
+      <div>
+        <a href="/" class="btn-classic">처음으로</a>
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <a href="/write" class="btn-classic btn-classic-primary">글쓰기</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 게시글 상세 보기 모달 -->
+  <div id="detailModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box">
+      <div class="classic-modal-header">
+        <span id="detailHeaderBoardName">게시글 상세 보기</span>
+        <button class="classic-modal-close" onclick="closeModal('detailModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body">
+        <table class="detail-meta-table">
+          <tr>
+            <th>제목</th>
+            <td colspan="3" id="detailTitle" style="font-weight: bold;"></td>
+          </tr>
+          <tr>
+            <th>작성자</th>
+            <td id="detailAuthor"></td>
+            <th>말머리</th>
+            <td id="detailCategory"></td>
+          </tr>
+          <tr>
+            <th>등록일</th>
+            <td id="detailDate"></td>
+            <th>조회 / 추천</th>
+            <td>조회 <span id="detailViews">0</span> / 추천 <span id="detailVotes" style="color: #0b58a2; font-weight: bold;">0</span></td>
+          </tr>
+        </table>
+
+        <!-- 첨부파일 목록 -->
+        <div id="detailAttachmentsBox" class="attachment-box" style="display: none;">
+          <strong>💾 첨부파일:</strong>
+          <span id="detailAttachmentLinks"></span>
+        </div>
+
+        <!-- 본문 내용 -->
+        <div id="detailContent" class="detail-content-area"></div>
+
+        <!-- 추천/비추천 버튼 -->
+        <div class="vote-container">
+          <button type="button" class="btn-vote btn-vote-up" onclick="handleVoteSubmit(1)">
+            👍 추천 <span id="btnVoteUpCount">0</span>
+          </button>
+          <button type="button" class="btn-vote btn-vote-down" onclick="handleVoteSubmit(-1)">
+            👎 비추천 <span id="btnVoteDownCount">0</span>
+          </button>
+        </div>
+
+        <!-- 관리자 공식 답변 영역 (VOC 전용) -->
+        <div id="answerSection" style="display: none;">
+          <div class="detail-answer-box">
+            <div class="detail-answer-header">
+              <span class="badge-re">RE</span>
+              <span id="answerAuthor">관리자 공식 답변</span>
+              <span id="answerDate" style="margin-left: auto; font-size: 11px; font-weight: normal; color: #6688aa;"></span>
+            </div>
+            <div id="answerContent" class="detail-answer-body"></div>
+          </div>
+        </div>
+
+        <!-- 다중 댓글 및 대댓글 섹션 -->
+        <div class="comments-section" id="commentsSection">
+          <div class="comments-header">
+            💬 댓글 (<span id="commentsTotalCount">0</span>)
+          </div>
+
+          <!-- 댓글 목록 -->
+          <div id="commentsList" class="comment-list"></div>
+
+          <!-- 댓글 작성 폼 -->
+          <form id="commentWriteForm" class="comment-form-box" onsubmit="handleCommentSubmit(event)">
+            <input type="hidden" id="commentParentId" value="">
+            <div id="replyingToNotice" style="display: none; font-size: 11px; color: #0b58a2; margin-bottom: 6px;">
+              ↳ <strong>답글 작성 중...</strong> <a onclick="cancelReply()" style="color: #c9302c; cursor: pointer;">[취소]</a>
+            </div>
+            <div class="comment-form-inputs" id="commentGuestInputs">
+              <input type="text" id="commentAuthorInput" class="classic-input" placeholder="작성자" style="width: 100px;">
+              <input type="password" id="commentPasswordInput" class="classic-input" placeholder="비밀번호(삭제용)" style="width: 120px;">
+              <label style="display: flex; align-items: center; gap: 3px; font-size: 11px;">
+                <input type="checkbox" id="commentIsSecret"> 비밀
+              </label>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <textarea id="commentContentInput" class="form-classic-textarea" rows="2" placeholder="댓글을 입력해주세요 (금칙어는 자동 필터링됩니다)" required></textarea>
+              <button type="submit" class="btn-classic btn-classic-primary" style="height: auto; width: 65px;">등록</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- 상세 모달 하단 액션 버튼 -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid #eeeeee;">
+          <button type="button" class="btn-classic" onclick="closeModal('detailModal')">닫기</button>
+          <div style="display: flex; gap: 4px;">
+            <button type="button" class="btn-classic" onclick="openEditModal()">수정</button>
+            <button type="button" class="btn-classic btn-classic-danger" onclick="openDeleteModal()">삭제</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 비밀글 비밀번호 모달 -->
+  <div id="passwordModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box" style="max-width: 360px;">
+      <div class="classic-modal-header">
+        <span>비밀글 확인</span>
+        <button class="classic-modal-close" onclick="closeModal('passwordModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body" style="text-align: center; padding: 20px;">
+        <p style="margin-bottom: 12px; font-size: 12px; color: #555555;">
+          비밀글입니다.<br>작성 시 설정한 비밀번호를 입력해주세요.
+        </p>
+        <form id="passwordForm" onsubmit="handleSecretPasswordSubmit(event)">
+          <div style="margin-bottom: 12px;">
+            <input type="password" id="secretPasswordInput" class="classic-input" placeholder="비밀번호 입력" required style="width: 160px; height: 26px; text-align: center;">
+            <div id="passwordError" style="color: #c9302c; font-size: 11px; margin-top: 4px; display: none;"></div>
+          </div>
+          <div style="display: flex; justify-content: center; gap: 6px;">
+            <button type="button" class="btn-classic" onclick="closeModal('passwordModal')">취소</button>
+            <button type="submit" class="btn-classic btn-classic-primary">확인</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 글 삭제 모달 -->
+  <div id="deleteModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box" style="max-width: 360px;">
+      <div class="classic-modal-header">
+        <span>게시글 삭제</span>
+        <button class="classic-modal-close" onclick="closeModal('deleteModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body" style="text-align: center; padding: 20px;">
+        <p style="margin-bottom: 12px; font-size: 12px; color: #555555;">
+          게시글을 삭제(휴지통 이동)하시겠습니까?<br>작성 시 설정한 비밀번호를 입력해주세요.
+        </p>
+        <form id="deleteForm" onsubmit="handleDeleteSubmit(event)">
+          <div style="margin-bottom: 12px;">
+            <input type="password" id="deletePasswordInput" class="classic-input" placeholder="비밀번호" required style="width: 160px; height: 26px; text-align: center;">
+            <div id="deleteError" style="color: #c9302c; font-size: 11px; margin-top: 4px; display: none;"></div>
+          </div>
+          <div style="display: flex; justify-content: center; gap: 6px;">
+            <button type="button" class="btn-classic" onclick="closeModal('deleteModal')">취소</button>
+            <button type="submit" class="btn-classic btn-classic-danger">삭제하기</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 글 수정 모달 -->
+  <div id="editModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box">
+      <div class="classic-modal-header">
+        <span>게시글 수정</span>
+        <button class="classic-modal-close" onclick="closeModal('editModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body">
+        <form id="editForm" onsubmit="handleEditSubmit(event)">
+          <table class="form-table">
+            <tr>
+              <th>비밀번호 확인</th>
+              <td>
+                <input type="password" id="editPasswordInput" class="classic-input" style="width: 150px;" placeholder="작성 시 비밀번호">
+                <span style="font-size: 10px; color: #888888;">(회원 본인 글일 경우 생략 가능)</span>
+              </td>
+            </tr>
+            <tr>
+              <th>말머리</th>
+              <td>
+                <input type="text" id="editCategory" class="classic-input" style="width: 150px;">
+              </td>
+            </tr>
+            <tr>
+              <th>제목</th>
+              <td>
+                <input type="text" id="editTitle" class="form-classic-input" required>
+              </td>
+            </tr>
+            <tr>
+              <th>내용</th>
+              <td>
+                <textarea id="editContent" class="form-classic-textarea" rows="8" required></textarea>
+              </td>
+            </tr>
+          </table>
+
+          <div id="editError" style="color: #c9302c; font-size: 11px; margin-bottom: 10px; display: none;"></div>
+          <div style="display: flex; justify-content: flex-end; gap: 6px;">
+            <button type="button" class="btn-classic" onclick="closeModal('editModal')">취소</button>
+            <button type="submit" class="btn-classic btn-classic-primary">수정완료</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 회원 로그인 모달 -->
+  <div id="loginModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box" style="max-width: 340px;">
+      <div class="classic-modal-header">
+        <span>회원 로그인</span>
+        <button class="classic-modal-close" onclick="closeModal('loginModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body">
+        <form onsubmit="handleUserLoginSubmit(event)">
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 2px;">아이디</label>
+            <input type="text" id="userLoginUsername" class="form-classic-input" required>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 2px;">비밀번호</label>
+            <input type="password" id="userLoginPassword" class="form-classic-input" required>
+          </div>
+          <div id="userLoginError" style="color: #c9302c; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+          <button type="submit" class="btn-classic btn-classic-primary" style="width: 100%; height: 26px;">로그인</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 회원가입 모달 -->
+  <div id="registerModal" class="modal-overlay" style="display: none;">
+    <div class="classic-modal-box" style="max-width: 360px;">
+      <div class="classic-modal-header">
+        <span>회원가입 (가입 시 100포인트 증정)</span>
+        <button class="classic-modal-close" onclick="closeModal('registerModal')">&times;</button>
+      </div>
+      <div class="classic-modal-body">
+        <form onsubmit="handleUserRegisterSubmit(event)">
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 2px;">아이디</label>
+            <input type="text" id="regUsername" class="form-classic-input" required minlength="3">
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 2px;">비밀번호</label>
+            <input type="password" id="regPassword" class="form-classic-input" required minlength="4">
+          </div>
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 11px; color: #555555; margin-bottom: 2px;">닉네임</label>
+            <input type="text" id="regNickname" class="form-classic-input" required maxlength="20">
+          </div>
+          <div id="regError" style="color: #c9302c; font-size: 11px; margin-bottom: 8px; display: none;"></div>
+          <button type="submit" class="btn-classic btn-classic-primary" style="width: 100%; height: 26px;">가입하기</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
