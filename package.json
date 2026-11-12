@@ -1,14 +1,15 @@
 {
   "name": "complaint-board",
   "version": "1.0.0",
-  "description": "익명 불만 접수 및 답변 게시판 시스템 (Zero-Dependency)",
+  "description": "?�명 불만 ?�수 �??��? 게시???�스??(Zero-Dependency)",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "seed": "node scripts/seed.js",
-    "test": "node scripts/test-advanced.js"
+    "test": "node scripts/test-advanced.js",
+    "pm2-start": "pm2 start server.js --name \"complaint-board\" && pm2 save"
   },
   "keywords": ["complaint", "anonymous", "board", "voc"],
   "author": "",
