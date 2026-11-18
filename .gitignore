@@ -17,3 +17,7 @@ Thumbs.db
 *.suo
 *.user
 *.sln.docstates
+
+# DB 임시 파일
+*.sqlite-shm
+*.sqlite-wal
